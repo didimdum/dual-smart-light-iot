@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard - Dual Smart Light</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <video autoplay muted loop id="bg-video">
+        <source src="{{ url_for('static', filename='abstract-blue-smoke.1920x1080.mp4') }}" type="video/mp4">
+    </video>
+    <div class="noise-overlay"></div>
+    <div id="toast-container"></div>
+    
+    <!-- NAVBAR ATAS (LIQUID GLASS) -->
+    <nav class="glass-navbar">
+        <div class="nav-brand">
+            <span></span> Smart Light
+        </div>
+        
+        <div class="nav-links">
+            <div class="nav-pill"></div>
+            <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}" onclick="movePill(this)">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: currentColor;"><path d="M12 3L2 12h3v8h5v-6h4v6h5v-8h3L12 3z"/></svg>
+                Control
+            </a>
+            <a href="/monitoring" class="nav-item {% if request.path == '/monitoring' %}active{% endif %}" onclick="movePill(this)">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: currentColor;"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a3 3 0 0 1 6 0v2H9z"/></svg>
+                History
+            </a>
+            <a href="/logout" class="nav-item" style="color: #fca5a5;" onclick="return confirm('Apakah Anda yakin ingin keluar?')">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: currentColor;"><path d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-9c-1.1 0-2 .9-2 2v4h2V5h9v14h-9v-4H9v4c0 1.1.9 2 2 2h9c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                Keluar
+            </a>
+        </div>
+
+        <div class="nav-status">
+            <div class="terminal-clock" id="live-clock">00:00:00</div>
+            <div class="server-status-pill">
+                <span id="mqtt-badge" class="{% if mqtt_connected %}badge-on{% else %}badge-off{% endif %}">
+                    {% if mqtt_connected %}Online{% else %}Offline{% endif %}
+                </span>
+                <span class="update-text">Update: <span id="last-update" style="color: #ffffff; font-weight: 700;">{{ last_update }}</span></span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <header class="top-header">
+            <div>
+                <h1>System Dashboard</h1>
+                <p>Dual Device Control via MQTT</p>
+            </div>
+        </header>
+
+        <div class="grid-container">
+            <!-- CARD BOX 1 (DIMAS) -->
+            <div class="card {% if box1_status == 'ON' %}card-on{% else %}card-off{% endif %}">
+                <h3><span class="live-dot"></span> Box 1 - Dimas</h3>
+                
+                <div id="box1-status" class="status-text {% if box1_status == 'ON' %}status-on{% else %}status-off{% endif %}">
+                    {{ box1_status }}
+                </div>
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <span id="box1-mode-text" class="mode-badge">{{ box1_mode }}</span>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="btn btn-on" style="width:100%" onclick="sendRelayCommand(1, 'ON', this)">NYALAKAN</button>
+                    <button type="button" class="btn btn-off" style="width:100%" onclick="sendRelayCommand(1, 'OFF', this)">MATIKAN</button>
+                </div>
+                <hr style="border-color: rgba(255,255,255,0.08); margin: 20px 0;">
+                
+                <form onsubmit="submitMode(event, 1, this)">
+                    <div class="form-group">
+                        <label class="form-label">Mode Operasi Box 1</label>
+                        <select name="mode" class="form-control" onchange="toggleTimeInputs(this)">
+                            <option value="MANUAL" {% if box1_mode == 'MANUAL' %}selected{% endif %}>Manual (Web)</option>
+                            <option value="LDR" {% if box1_mode == 'LDR' %}selected{% endif %}>Auto Sensing (LDR)</option>
+                            <option value="SCHEDULE" {% if box1_mode == 'SCHEDULE' %}selected{% endif %}>Schedule</option>
+                        </select>
+                    </div>
+                    <div class="time-inputs-container">
+                        <div class="form-group time-group">
+                            <label class="form-label">ON</label>
+                            <input type="time" name="time_on" value="{{ schedule_on_1 }}" class="form-control">
+                        </div>
+                        <div class="form-group time-group">
+                            <label class="form-label">OFF</label>
+                            <input type="time" name="time_off" value="{{ schedule_off_1 }}" class="form-control">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-submit">Simpan Box 1</button>
+                </form>
+            </div>
+
+            <!-- CARD BOX 2 (YUBI) -->
+            <div class="card {% if box2_status == 'ON' %}card-on{% else %}card-off{% endif %}">
+                <h3><span class="live-dot"></span> Box 2 - Yubi</h3>
+                
+                <div id="box2-status" class="status-text {% if box2_status == 'ON' %}status-on{% else %}status-off{% endif %}">
+                    {{ box2_status }}
+                </div>
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <span id="box2-mode-text" class="mode-badge">{{ box2_mode }}</span>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="btn btn-on" style="width:100%" onclick="sendRelayCommand(2, 'ON', this)">NYALAKAN</button>
+                    <button type="button" class="btn btn-off" style="width:100%" onclick="sendRelayCommand(2, 'OFF', this)">MATIKAN</button>
+                </div>
+                <hr style="border-color: rgba(255,255,255,0.08); margin: 20px 0;">
+                
+                <form onsubmit="submitMode(event, 2, this)">
+                    <div class="form-group">
+                        <label class="form-label">Mode Operasi Box 2</label>
+                        <select name="mode" class="form-control" onchange="toggleTimeInputs(this)">
+                            <option value="MANUAL" {% if box2_mode == 'MANUAL' %}selected{% endif %}>Manual (Web)</option>
+                            <option value="LDR" {% if box2_mode == 'LDR' %}selected{% endif %}>Auto Sensing (LDR)</option>
+                            <option value="SCHEDULE" {% if box2_mode == 'SCHEDULE' %}selected{% endif %}>Schedule</option>
+                        </select>
+                    </div>
+                    <div class="time-inputs-container">
+                        <div class="form-group time-group">
+                            <label class="form-label">ON</label>
+                            <input type="time" name="time_on" value="{{ schedule_on_2 }}" class="form-control">
+                        </div>
+                        <div class="form-group time-group">
+                            <label class="form-label">OFF</label>
+                            <input type="time" name="time_off" value="{{ schedule_off_2 }}" class="form-control">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-submit">Simpan Box 2</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- Animasi Pill Navbar ---
+        function movePill(element) {
+            const pill = document.querySelector('.nav-pill');
+            const links = document.querySelectorAll('.nav-item');
+            
+            if(!pill || !element) return;
+
+            links.forEach(link => link.classList.remove('active'));
+            element.classList.add('active');
+
+            const rect = element.getBoundingClientRect();
+            const parentRect = element.parentElement.getBoundingClientRect();
+            
+            pill.style.width = `${rect.width}px`;
+            pill.style.transform = `translateX(${rect.left - parentRect.left}px)`;
+        }
+
+        window.addEventListener('load', () => {
+            const activeLink = document.querySelector('.nav-item.active');
+            if(activeLink) movePill(activeLink);
+            
+            // Inisialisasi status disable input jam untuk seluruh form
+            document.querySelectorAll('select[name="mode"]').forEach(select => {
+                toggleTimeInputs(select);
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            const activeLink = document.querySelector('.nav-item.active');
+            if(activeLink) movePill(activeLink);
+        });
+
+        // --- Logic Auto-Disable Input Jam bila Bukan Mode SCHEDULE ---
+        function toggleTimeInputs(selectElement) {
+            const form = selectElement.closest('form');
+            if (!form) return;
+            const timeInputs = form.querySelectorAll('input[type="time"]');
+            const timeGroups = form.querySelectorAll('.time-group');
+            const isSchedule = (selectElement.value === 'SCHEDULE');
+
+            timeInputs.forEach(input => {
+                input.disabled = !isSchedule;
+            });
+
+            timeGroups.forEach(group => {
+                if (isSchedule) {
+                    group.classList.remove('disabled-group');
+                } else {
+                    group.classList.add('disabled-group');
+                }
+            });
+        }
+
+        // --- Efek 3D Card ---
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -4;
+                const rotateY = ((x - centerX) / centerX) * 4;
+                
+                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = `perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)`;
+            });
+        });
+
+        // --- Core Functions ---
+        function updateClock() {
+            const now = new Date();
+            const clockEl = document.getElementById('live-clock');
+            if(clockEl) {
+                clockEl.innerText = 
+                    String(now.getHours()).padStart(2, '0') + ':' +
+                    String(now.getMinutes()).padStart(2, '0') + ':' +
+                    String(now.getSeconds()).padStart(2, '0');
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function triggerToast(message) {
+            const container = document.getElementById('toast-container');
+            if(!container) return;
+            
+            const toast = document.createElement('div');
+            toast.className = 'cyber-toast';
+            toast.innerText = message;
+            container.appendChild(toast);
+
+            // Batasi maksimal 2 notifikasi (hapus yang paling lama)
+            const currentToasts = container.querySelectorAll('.cyber-toast');
+            if (currentToasts.length > 2) {
+                currentToasts[0].remove(); 
+            }
+
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 4000);
+        }
+
+        async function sendRelayCommand(boxId, action, btnElement) {
+            const originalText = btnElement.innerText;
+            btnElement.disabled = true;
+            btnElement.innerHTML = `<span class="spinner"></span> Proses...`;
+
+            try {
+                await fetch(`/relay/${boxId}/${action}`);
+                triggerToast(`Box ${boxId}: Command ${action} Terkirim`);
+            } catch (error) {
+                triggerToast(`Gagal mengirim perintah: ${error}`);
+            }
+
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerText = originalText;
+            }, 1500);
+        }
+
+        async function submitMode(event, boxId, formElement) {
+            event.preventDefault(); 
+            const btnElement = formElement.querySelector('.btn-submit');
+            const originalText = btnElement.innerText;
+            
+            btnElement.disabled = true;
+            btnElement.innerHTML = `<span class="spinner"></span> Menyimpan...`;
+
+            try {
+                const formData = new FormData(formElement);
+                await fetch(`/set_mode/${boxId}`, { method: 'POST', body: formData });
+                triggerToast(`Pengaturan Box ${boxId} Berhasil Disimpan`);
+            } catch (error) {
+                triggerToast(`Gagal menyimpan pengaturan`);
+            }
+
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerText = originalText;
+            }, 1000);
+        }
+
+        // --- Interval Status Auto-Sync ---
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                
+                const badge = document.getElementById('mqtt-badge');
+                if(badge) {
+                    if (data.mqtt_connected) {
+                        badge.className = 'badge-on';
+                        badge.innerText = 'Online';
+                    } else {
+                        badge.className = 'badge-off';
+                        badge.innerText = 'Offline';
+                    }
+                }
+                
+                const lastUpdate = document.getElementById('last-update');
+                if(lastUpdate) lastUpdate.innerText = data.last_update;
+
+                const b1Status = document.getElementById('box1-status');
+                if(b1Status) {
+                    b1Status.innerText = data.box1_status;
+                    b1Status.className = 'status-text ' + (data.box1_status === 'ON' ? 'status-on' : 'status-off');
+                    document.getElementById('box1-mode-text').innerText = data.box1_mode;
+                    const card1 = b1Status.closest('.card');
+                    if (data.box1_status === 'ON') {
+                        card1.classList.remove('card-off'); card1.classList.add('card-on');
+                    } else {
+                        card1.classList.remove('card-on'); card1.classList.add('card-off');
+                    }
+                }
+
+                const b2Status = document.getElementById('box2-status');
+                if(b2Status) {
+                    b2Status.innerText = data.box2_status;
+                    b2Status.className = 'status-text ' + (data.box2_status === 'ON' ? 'status-on' : 'status-off');
+                    document.getElementById('box2-mode-text').innerText = data.box2_mode;
+                    const card2 = b2Status.closest('.card');
+                    if (data.box2_status === 'ON') {
+                        card2.classList.remove('card-off'); card2.classList.add('card-on');
+                    } else {
+                        card2.classList.remove('card-on'); card2.classList.add('card-off');
+                    }
+                }
+
+            } catch (e) {
+                console.log("Menunggu koneksi server...");
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

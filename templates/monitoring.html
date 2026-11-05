@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monitoring - Dual Smart Light</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <video autoplay muted loop id="bg-video">
+        <source src="{{ url_for('static', filename='abstract-blue-smoke.1920x1080.mp4') }}" type="video/mp4">
+    </video>
+    <div class="noise-overlay"></div>
+
+    <!-- NAVBAR ATAS (LIQUID GLASS) -->
+    <nav class="glass-navbar">
+        <div class="nav-brand">
+            <span></span> Smart Light
+        </div>
+        
+        <div class="nav-links">
+            <div class="nav-pill"></div>
+            <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}" onclick="movePill(this)">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: currentColor;"><path d="M12 3L2 12h3v8h5v-6h4v6h5v-8h3L12 3z"/></svg>
+                Control
+            </a>
+            <a href="/monitoring" class="nav-item {% if request.path == '/monitoring' %}active{% endif %}" onclick="movePill(this)">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: currentColor;"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a3 3 0 0 1 6 0v2H9z"/></svg>
+                History
+            </a>
+            <a href="/logout" class="nav-item" style="color: #fca5a5;" onclick="return confirm('Apakah Anda yakin ingin keluar?')">
+                <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: currentColor;"><path d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-9c-1.1 0-2 .9-2 2v4h2V5h9v14h-9v-4H9v4c0 1.1.9 2 2 2h9c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                Keluar
+            </a>
+        </div>
+
+        <div class="nav-status">
+            <div class="terminal-clock" id="live-clock">00:00:00</div>
+            <div class="server-status-pill">
+                <span id="mqtt-badge" class="{% if mqtt_connected %}badge-on{% else %}badge-off{% endif %}">
+                    {% if mqtt_connected %}Online{% else %}Offline{% endif %}
+                </span>
+                <span class="update-text">Update: <span id="last-update" style="color: #ffffff; font-weight: 700;">{{ last_update }}</span></span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <header class="top-header">
+            <div>
+                <h1>Activity Log</h1>
+                <p>Track actions from Box 1 (Dimas) & Box 2 (Yubi)</p>
+            </div>
+            <div class="server-status-pill" style="font-size: 0.85rem;">
+                Total: <span id="total-events" style="color: #38bdf8; font-weight: 800; margin-left: 5px;">{{ history|length }}</span> events
+            </div>
+        </header>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Waktu</th>
+                        <th>Perangkat / Box</th>
+                        <th>Aktivitas / Status</th>
+                    </tr>
+                </thead>
+                <tbody id="activity-table-body">
+                    {% if history %}
+                        {% for data in history %}
+                        <tr>
+                            <td>{{ data.time }}</td>
+                            <td><span style="color: #38bdf8; font-weight:700;">{{ data.device }}</span></td>
+                            <td>
+                                {% if 'ON' in data.action %}
+                                    <span class="badge-on">AKTIF (ON)</span>
+                                {% elif 'OFF' in data.action %}
+                                    <span class="badge-off">MATI (OFF)</span>
+                                {% else %}
+                                    <span style="color: #cbd5e1; font-weight: 500;">{{ data.action }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="3" style="text-align: center; color: rgba(255,255,255,0.5); padding: 40px;">
+                                Belum ada aktivitas yang tercatat
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        // --- Animasi Pill Navbar ---
+        function movePill(element) {
+            const pill = document.querySelector('.nav-pill');
+            const links = document.querySelectorAll('.nav-item');
+            
+            if(!pill || !element) return;
+
+            links.forEach(link => link.classList.remove('active'));
+            element.classList.add('active');
+
+            const rect = element.getBoundingClientRect();
+            const parentRect = element.parentElement.getBoundingClientRect();
+            
+            pill.style.width = `${rect.width}px`;
+            pill.style.transform = `translateX(${rect.left - parentRect.left}px)`;
+        }
+
+        window.addEventListener('load', () => {
+            const activeLink = document.querySelector('.nav-item.active');
+            if(activeLink) movePill(activeLink);
+        });
+
+        window.addEventListener('resize', () => {
+            const activeLink = document.querySelector('.nav-item.active');
+            if(activeLink) movePill(activeLink);
+        });
+
+        // --- Jam Digital Navbar ---
+        function updateClock() {
+            const now = new Date();
+            const clockEl = document.getElementById('live-clock');
+            if(clockEl) {
+                clockEl.innerText = 
+                    String(now.getHours()).padStart(2, '0') + ':' +
+                    String(now.getMinutes()).padStart(2, '0') + ':' +
+                    String(now.getSeconds()).padStart(2, '0');
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- Real-time Status Update & Monitoring Data ---
+        async function fetchStatusAndMonitoring() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                
+                const badge = document.getElementById('mqtt-badge');
+                if(badge) {
+                    if (data.mqtt_connected) {
+                        badge.className = 'badge-on';
+                        badge.innerText = 'Online';
+                    } else {
+                        badge.className = 'badge-off';
+                        badge.innerText = 'Offline';
+                    }
+                }
+                
+                const lastUpdate = document.getElementById('last-update');
+                if(lastUpdate) lastUpdate.innerText = data.last_update;
+
+                // Update Tabel Log Aktivitas
+                const response = await fetch('/monitoring');
+                const htmlText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+                
+                const newTbody = doc.querySelector('#activity-table-body');
+                const newTotal = doc.querySelector('#total-events');
+                const currentTbody = document.querySelector('#activity-table-body');
+                
+                if (newTbody && currentTbody.innerHTML !== newTbody.innerHTML) {
+                    currentTbody.innerHTML = newTbody.innerHTML;
+                }
+                if(newTotal) document.querySelector('#total-events').innerText = newTotal.innerText;
+
+            } catch (error) {
+                console.log("Gagal update data...", error);
+            }
+        }
+        setInterval(fetchStatusAndMonitoring, 2000);
+    </script>
+</body>
+</html>

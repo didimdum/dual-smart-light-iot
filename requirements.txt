@@ -1,0 +1,5 @@
+Flask
+paho-mqtt
+flask-limiter
+python-dotenv
+gunicorn
